@@ -71,10 +71,24 @@ public struct ExtendableEnumMacro: MemberMacro, ExtensionMacro {
 			throw MacroExpansionErrorMessage("@ExtendableEnum can only be applied to enums")
 		}
 		var extensions: [ExtensionDeclSyntax] = []
-		if !(enumDecl.inheritanceClause?.inheritedTypes.contains(where: { $0.type.trimmedDescription == "Hashable" || $0.type.trimmedDescription == "Swift.Hashable" }) ?? false) {
+		// make list of types to enforce
+		let enforcedTypes: [[String]] = [
+			["Hashable", "Swift.Hashable"],
+			//["RawRepresentable", "Swift.RawRepresentable"]
+		]
+		let inheritedTypes = enumDecl.inheritanceClause?.inheritedTypes
+		var typesToAdd: [String] = []
+		for enforcedType in enforcedTypes {
+			if !(inheritedTypes?.contains(where: { enforcedType.contains($0.type.trimmedDescription) }) ?? false) {
+				// add type to extension
+				typesToAdd.append(enforcedType[0])
+			}
+		}
+		// add extension to enforce types
+		if !typesToAdd.isEmpty {
 			let hashableExtension: DeclSyntax =
 				"""
-				extension \(type.trimmed): Hashable {}
+				extension \(type.trimmed): \(raw: typesToAdd.joined(separator: ", ")) {}
 				"""
 			extensions.append(hashableExtension.as(ExtensionDeclSyntax.self)!)
 		}
@@ -205,6 +219,8 @@ public struct ExtendableEnumMacro: MemberMacro, ExtensionMacro {
 		// Create known values map
 		let knownValuesMapDecl: DeclSyntax =
 			"""
+			public static let knownCases: [Self] = [\(raw: caseNames.map { ".\($0)" }.joined(separator: ", "))]
+			
 			private static let knownValuesMap: [Self:KnownCases.RawValue] = [
 				\(raw: caseNames.map {
 					".\($0): Self.KnownCases.\($0).rawValue,"

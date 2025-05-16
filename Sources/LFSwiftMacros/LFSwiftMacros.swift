@@ -6,7 +6,7 @@
 //
 
 @attached(member, names: arbitrary, named(rawValue), named(init))
-@attached(extension, conformances: Hashable)
+@attached(extension, conformances: Hashable, RawRepresentable)
 public macro ExtendableEnum() = #externalMacro(
 	module: "LFSwiftMacrosMacros",
 	type: "ExtendableEnumMacro"
