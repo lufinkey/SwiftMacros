@@ -1,4 +1,4 @@
-import SwiftCompilerPlugin
+
 import SwiftSyntax
 import SwiftSyntaxBuilder
 import SwiftSyntaxMacros
@@ -23,11 +23,4 @@ public struct StringifyMacro: ExpressionMacro {
 
         return "(\(argument), \(literal: argument.description))"
     }
-}
-
-@main
-struct LFSwiftMacrosPlugin: CompilerPlugin {
-    let providingMacros: [Macro.Type] = [
-        StringifyMacro.self,
-    ]
 }
