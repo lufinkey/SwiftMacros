@@ -73,7 +73,7 @@ public struct ExtendableEnumMacro: MemberMacro, ExtensionMacro {
 		var extensions: [ExtensionDeclSyntax] = []
 		// make list of types to enforce
 		let enforcedTypes: [[String]] = [
-			["Hashable", "Swift.Hashable"],
+			//["Hashable", "Swift.Hashable"],
 			//["RawRepresentable", "Swift.RawRepresentable"]
 		]
 		let inheritedTypes = enumDecl.inheritanceClause?.inheritedTypes
@@ -196,48 +196,68 @@ public struct ExtendableEnumMacro: MemberMacro, ExtensionMacro {
 			unknownCasePrefix = "\(unknownCaseName)("
 		}
 		
-		// Check if the unknown case is already defined
-		let existingUnknownCaseDecl = enumDecl.memberBlock.members.lazy.compactMap { member in
-			return member.decl.as(EnumCaseDeclSyntax.self)?.elements.first(where: { element in
-				return element.name.text == unknownCaseName
-			})
-		}.first
-		if let existingUnknownCaseDecl {
-			// unknown case is defined
-			if existingUnknownCaseDecl.parameterClause?.parameters.count != 1 {
-				throw MacroExpansionErrorMessage("Unknown case `\(unknownCaseName)` must have exactly one parameter")
+		// Go through all the members
+		var hasUnknownCase = false
+		var hasHashInto = false
+		for member in enumDecl.memberBlock.members {
+			if let caseDecl = member.decl.as(EnumCaseDeclSyntax.self) {
+				if !hasUnknownCase {
+					if let existingUnknownCaseDecl = caseDecl.elements.first(where: { $0.name.text == unknownCaseName }) {
+						// unknown case is defined
+						hasUnknownCase = true
+						// validate unknown case
+						if existingUnknownCaseDecl.parameterClause?.parameters.count != 1 {
+							throw MacroExpansionErrorMessage("Unknown case `\(unknownCaseName)` must have exactly one parameter")
+						}
+						let paramTypeName = existingUnknownCaseDecl.parameterClause?.parameters.first?.type.trimmedDescription
+						if paramTypeName != rawValueTypeName && paramTypeName != "RawValue" {
+							throw MacroExpansionErrorMessage("Unknown case must take a single parameter of type RawValue or \(rawValueTypeName) (found \(paramTypeName ?? "<nil>"))")
+						}
+					}
+				}
+			} else if let funcDecl = member.decl.as(FunctionDeclSyntax.self) {
+				if funcDecl.name.text == "hash(into hasher: inout Hasher)" {
+					hasHashInto = true
+				}
 			}
-			let paramTypeName = existingUnknownCaseDecl.parameterClause?.parameters.first?.type.trimmedDescription
-			if paramTypeName != rawValueTypeName && paramTypeName != "RawValue" {
-				throw MacroExpansionErrorMessage("Unknown case must take a single parameter of type RawValue or \(rawValueTypeName) (found \(paramTypeName ?? "<nil>"))")
-			}
+		}
+		if hasHashInto {
+			throw MacroExpansionErrorMessage("fuk")
 		}
 		
 		// Create `.unknown(_ rawValue: RawValue)` if not already present
-		let unknownCaseDecl: DeclSyntax? = (existingUnknownCaseDecl == nil) ? "case \(raw: unknownCasePrefix) \(raw: rawValueType))" : nil
+		let unknownCaseDecl: DeclSyntax? = !hasUnknownCase ? "case \(raw: unknownCasePrefix) \(raw: rawValueType))" : nil
 		
-		// Create known values map
-		let knownValuesMapDecl: DeclSyntax =
+		// Create known cases array
+		let knownCasesMemberDecl: DeclSyntax =
 			"""
 			public static let knownCases: [Self] = [\(raw: caseNames.map { ".\($0)" }.joined(separator: ", "))]
-			
-			private static let knownValuesMap: [Self:KnownCases.RawValue] = [
+			"""
+		
+		// Create known values map
+		let keysToValuesDecl: DeclSyntax =
+			"""
+			private static func valueFromKey(_ key: Self) -> KnownCases.RawValue? {
+				switch key {
 				\(raw: caseNames.map {
-					".\($0): Self.KnownCases.\($0).rawValue,"
-				}.joined(separator: "\n\t"))
-			]
+					"case .\($0): return KnownCases.\($0).rawValue"
+				}.joined(separator: "\n"))
+				default: return nil
+				}
+			}
 			"""
 		
 		// Create known keys map
-		let knownKeysMapDecl: DeclSyntax =
+		let valuesToKeysDecl: DeclSyntax =
 			"""
-			private static let knownKeysMap: [KnownCases.RawValue:Self] = {
-				var map: [\(raw: rawValueTypeName):Self] = [:]
-				for (key,val) in Self.knownValuesMap {
-					map[val] = key
+			private static func keyFromValue(_ value: KnownCases.RawValue) -> Self? {
+				switch value {
+					\(raw: caseNames.map {
+						"case KnownCases.\($0).rawValue: return .\($0) "
+					}.joined(separator: "\n"))
+					default: return nil
 				}
-				return map
-			}()
+			}
 			"""
 		
 		// Create rawValue member var
@@ -247,7 +267,7 @@ public struct ExtendableEnumMacro: MemberMacro, ExtensionMacro {
 				if case let .unknown(rawValue) = self {
 					return rawValue
 				} else {
-					return Self.knownValuesMap[self]!
+					return Self.valueFromKey(self)!
 				}
 			}
 			"""
@@ -255,7 +275,7 @@ public struct ExtendableEnumMacro: MemberMacro, ExtensionMacro {
 		let initDecl: DeclSyntax =
 			"""
 			public init(rawValue: \(raw: rawValueTypeName)) {
-				if let match = Self.knownKeysMap[rawValue] {
+				if let match = Self.keyFromValue(rawValue) {
 					self = match
 				} else {
 					self = .unknown(rawValue)
@@ -263,6 +283,24 @@ public struct ExtendableEnumMacro: MemberMacro, ExtensionMacro {
 			}
 			"""
 		
-		return casesDecl + (unknownCaseDecl.map { [$0] } ?? []) + [knownValuesMapDecl, knownKeysMapDecl, rawValueDecl, initDecl]
+		/*let hasherDecl: DeclSyntax =
+			"""
+			public func hash(into hasher: inout Hasher) {
+				switch self {
+				\(raw: caseNames.map {
+					"""
+					case .\($0):
+						hasher.combine(KnownCases.\($0).rawValue)
+						break
+					"""
+				}.joined(separator: "\n"))
+				case let \(raw: unknownCaseName)(rawValue):
+					hasher.combine(rawValue)
+					break
+				}
+			}
+			"""*/
+		
+		return casesDecl + (unknownCaseDecl.map { [$0] } ?? []) + [knownCasesMemberDecl, keysToValuesDecl, valuesToKeysDecl, rawValueDecl, initDecl]
 	}
 }
