@@ -121,6 +121,7 @@ public struct ExtendableEnumMacro: MemberMacro, ExtensionMacro {
 			throw MacroExpansionErrorMessage("KnownCases enum must inherit from a type")
 		}
 		let rawValueTypeName = rawValueType.type.trimmedDescription
+		let rawValueIsString = (rawValueTypeName == "String" || rawValueTypeName == "Swift.String")
 		
 		// Get all the known value cases
 		var caseNames: [String] = []
@@ -249,14 +250,26 @@ public struct ExtendableEnumMacro: MemberMacro, ExtensionMacro {
 			"""
 		
 		// Create known keys map
-		let valuesToKeysDecl: DeclSyntax =
-			"""
-			private static let knownKeysMap: [KnownCases.RawValue:Self] = [
-				\(raw: caseNames.map {
-					"KnownCases.\($0).rawValue: .\($0)"
-				}.joined(separator: ",\n"))
-			]
-			"""
+		let valuesToKeysDecl: DeclSyntax
+		if rawValueIsString {
+			valuesToKeysDecl =
+				"""
+				private static let knownKeysMap: [Substring:Self] = [
+					\(raw: caseNames.map {
+						"KnownCases.\($0).rawValue[...]: .\($0)"
+					}.joined(separator: ",\n"))
+				]
+				"""
+		} else {
+			valuesToKeysDecl =
+				"""
+				private static let knownKeysMap: [KnownCases.RawValue:Self] = [
+					\(raw: caseNames.map {
+						"KnownCases.\($0).rawValue: .\($0)"
+					}.joined(separator: ",\n"))
+				]
+				"""
+		}
 		
 		// Create rawValue member var
 		let rawValueDecl: DeclSyntax =
@@ -270,16 +283,38 @@ public struct ExtendableEnumMacro: MemberMacro, ExtensionMacro {
 			}
 			"""
 		
-		let initDecl: DeclSyntax =
-			"""
-			public init(rawValue: \(raw: rawValueTypeName)) {
-				if let match = Self.knownKeysMap[rawValue] {
-					self = match
-				} else {
-					self = .unknown(rawValue)
+		let initDecl: DeclSyntax
+		if rawValueIsString {
+			initDecl =
+				"""
+				public init(rawValue: \(raw: rawValueTypeName)) {
+					if let match = Self.knownKeysMap[rawValue[...]] {
+						self = match
+					} else {
+						self = .unknown(rawValue)
+					}
 				}
-			}
-			"""
+				
+				public init(rawValue: Substring) {
+					if let match = Self.knownKeysMap[rawValue] {
+						self = match
+					} else {
+						self = .unknown(String(rawValue))
+					}
+				}
+				"""
+		} else {
+			initDecl =
+				"""
+				public init(rawValue: \(raw: rawValueTypeName)) {
+					if let match = Self.knownKeysMap[rawValue] {
+						self = match
+					} else {
+						self = .unknown(rawValue)
+					}
+				}
+				"""
+		}
 		
 		/*let hasherDecl: DeclSyntax =
 			"""
