@@ -250,14 +250,11 @@ public struct ExtendableEnumMacro: MemberMacro, ExtensionMacro {
 		// Create known keys map
 		let valuesToKeysDecl: DeclSyntax =
 			"""
-			private static func keyFromValue(_ value: KnownCases.RawValue) -> Self? {
-				switch value {
-					\(raw: caseNames.map {
-						"case KnownCases.\($0).rawValue: return .\($0) "
-					}.joined(separator: "\n"))
-					default: return nil
-				}
-			}
+			private static let knownKeysMap: [KnownCases.RawValue:Self] = [
+				\(raw: caseNames.map {
+					"KnownCases.\($0).rawValue: .\($0)"
+				}.joined(separator: ",\n"))
+			]
 			"""
 		
 		// Create rawValue member var
@@ -275,7 +272,7 @@ public struct ExtendableEnumMacro: MemberMacro, ExtensionMacro {
 		let initDecl: DeclSyntax =
 			"""
 			public init(rawValue: \(raw: rawValueTypeName)) {
-				if let match = Self.keyFromValue(rawValue) {
+				if let match = Self.knownKeysMap[rawValue] {
 					self = match
 				} else {
 					self = .unknown(rawValue)
