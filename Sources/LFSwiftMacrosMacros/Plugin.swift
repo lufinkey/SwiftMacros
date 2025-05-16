@@ -11,8 +11,6 @@ import SwiftSyntaxMacros
 @main
 struct LFSwiftMacrosPlugin: CompilerPlugin {
 	let providingMacros: [Macro.Type] = [
-		StringifyMacro.self,
-		ExtendableEnumMacro.self,
-		ExtendableEnumCaseMacro.self
+		ExtendableEnumMacro.self
 	]
 }

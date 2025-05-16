@@ -1,16 +1,16 @@
+//
+//  main.swift
+//  LFSwiftMacros
+//
+//  Created by Luis Finke on 5/16/25.
+//
+
 import LFSwiftMacros
 
-let a = 17
-let b = 25
-
-let (result, code) = #stringify(a + b)
-
-print("The value \(result) was produced by the code \"\(code)\"")
-
 @ExtendableEnum
-enum Color: Hashable {
+enum Color {
 	private enum KnownCases: String {
-		case red = "blue"
+		case red = "thecolorred"
 	}
 }
 
