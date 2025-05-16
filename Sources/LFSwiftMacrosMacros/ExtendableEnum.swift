@@ -73,6 +73,7 @@ public struct ExtendableEnumMacro: MemberMacro, ExtensionMacro {
 		var extensions: [ExtensionDeclSyntax] = []
 		// make list of types to enforce
 		let enforcedTypes: [[String]] = [
+			["LFSwiftMacros.ExtendableEnum"]
 			//["Hashable", "Swift.Hashable"],
 			//["RawRepresentable", "Swift.RawRepresentable"]
 		]
