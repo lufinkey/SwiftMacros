@@ -13,5 +13,10 @@ public macro ExtendableEnum() = #externalMacro(
 )
 
 public protocol ExtendableEnum {
-	//
+	associatedtype RawValue
+	
+	static var knownCases: [Self] { get }
+	var rawValue: RawValue { get }
+	
+	init(rawValue: RawValue)
 }
